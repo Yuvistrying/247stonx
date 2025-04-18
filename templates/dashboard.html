@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - 247 Stonx{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>Your Stock Dashboard <small class="text-muted">Real-time 24/7 stock prices</small></h2>
+            <p>Track your favorite stocks in real-time.</p>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <form id="addTickerForm" method="POST" action="{{ url_for('add_ticker') }}" class="mb-3">
+                <div class="input-group">
+                    <input type="text" class="form-control" id="tickerSymbol" name="ticker" placeholder="Enter ticker symbol (e.g., AAPL)">
+                    <button class="btn btn-primary" type="submit">Add Ticker</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row" id="tickersContainer">
+        {% for ticker in current_user.tickers %}
+        <div class="col-md-4 mb-4 ticker-card-container" data-ticker="{{ ticker.ticker }}">
+            <div class="card ticker-card h-100">
+                <div class="card-header card-header-custom">
+                    {{ ticker.ticker }}
+                    <form class="delete-form" action="{{ url_for('remove_ticker', ticker=ticker.ticker) }}" method="post" style="display: inline;">
+                        <button type="button" class="btn btn-sm btn-danger delete-btn" data-ticker="{{ ticker.ticker }}">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </form>
+                </div>
+                <div class="card-body position-relative">
+                    <div class="ticker-data">
+                        <h3 class="price">--</h3>
+                        <p class="change mb-0">--</p>
+                        <span class="market-status badge">--</span>
+                        <div class="last-updated mt-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                You haven't added any stocks to track yet. Use the form above to add some!
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %} 
