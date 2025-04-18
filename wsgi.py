@@ -12,7 +12,7 @@ if path not in sys.path:
 
 # Set production environment variables
 os.environ['PRODUCTION'] = 'true'
-os.environ['SECRET_KEY'] = 'your-production-secret-key'  # Change this to a secure random value
+os.environ['SECRET_KEY'] = '5898962f7461478142ed67c47e467dd21bb8626fd303d143cbba551e0d077e9f'  # Secure random key
 # os.environ['DATABASE_URL'] = 'sqlite:///stocks.db'  # Default SQLite path
 
 # Import your Flask app
