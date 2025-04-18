@@ -1,0 +1,57 @@
+name: Deploy to PythonAnywhere
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    # Uncomment this if you add tests to your project
+    # - name: Run tests
+    #   run: |
+    #     pytest
+    
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Deploy to PythonAnywhere
+      env:
+        PYTHON_ANYWHERE_API_TOKEN: ${{ secrets.PYTHON_ANYWHERE_API_TOKEN }}
+        PA_USERNAME: ${{ secrets.PA_USERNAME }}
+      run: |
+        # Create a console to run the deployment script
+        response=$(curl -s -X POST \
+          "https://www.pythonanywhere.com/api/v0/user/$PA_USERNAME/consoles/" \
+          -H "Authorization: Token $PYTHON_ANYWHERE_API_TOKEN" \
+          -d "executable=python3.9" \
+          -d "working_directory=/home/$PA_USERNAME/")
+        
+        console_id=$(echo $response | python -c "import sys, json; print(json.load(sys.stdin)['id'])")
+        
+        echo "Console created with ID: $console_id"
+        
+        # Send the command to run the deployment script
+        input='{"input": "cd /home/$PA_USERNAME/247stonx && git pull && touch /var/www/${PA_USERNAME}_pythonanywhere_com_wsgi.py\n"}'
+        
+        curl -s -X POST \
+          "https://www.pythonanywhere.com/api/v0/user/$PA_USERNAME/consoles/$console_id/send_input/" \
+          -H "Authorization: Token $PYTHON_ANYWHERE_API_TOKEN" \
+          -H "Content-Type: application/json" \
+          --data "$input"
+        
+        echo "Deployment started on PythonAnywhere" 
