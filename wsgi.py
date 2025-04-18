@@ -6,7 +6,7 @@ import sys
 import os
 
 # Add your project directory to the sys.path
-path = '/home/<pythonanywhere-username>/247stonx'
+path = '/home/yuvalalalalal/247stonx'
 if path not in sys.path:
     sys.path.append(path)
 
@@ -17,3 +17,7 @@ os.environ['SECRET_KEY'] = 'your-production-secret-key'  # Change this to a secu
 
 # Import your Flask app
 from app import app as application 
+"""
+Replace {username} with your actual PythonAnywhere username when deploying.
+Make sure to set a strong SECRET_KEY in the PythonAnywhere dashboard or directly in this file.
+""" 

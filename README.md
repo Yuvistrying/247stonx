@@ -55,7 +55,9 @@ python app.py
 
 ## Deployment on PythonAnywhere
 
-This application is designed to be easily deployed on PythonAnywhere:
+This application is designed to be easily deployed on PythonAnywhere with automated CI/CD using GitHub Actions:
+
+### Manual Deployment
 
 1. Sign up for a free PythonAnywhere account
 
@@ -75,6 +77,47 @@ from app import app as application
 ```
 
 4. Start the web app from the PythonAnywhere dashboard
+
+### Automated Deployment with GitHub Actions
+
+This repository contains GitHub Actions workflow for automated deployment to PythonAnywhere:
+
+1. Generate a PythonAnywhere API token:
+   - Go to https://www.pythonanywhere.com/account/
+   - Navigate to the "API Token" tab
+   - Generate a new token if you don't have one
+
+2. Set up GitHub Secrets:
+   - Go to your GitHub repository → Settings → Secrets and variables → Actions
+   - Add two new repository secrets:
+     - `PA_USERNAME`: Your PythonAnywhere username
+     - `PYTHON_ANYWHERE_API_TOKEN`: Your PythonAnywhere API token
+
+3. Initial Setup on PythonAnywhere (one-time):
+   - Create a new web app with Flask
+   - Set the source code directory to `/home/yourusername/247stonx`
+   - Set the WSGI configuration file path
+   - Clone the repository to your PythonAnywhere account:
+     ```
+     cd ~
+     git clone https://github.com/yourusername/247stonx.git
+     ```
+   - Install dependencies:
+     ```
+     pip install -r requirements.txt
+     ```
+   - Update the WSGI file with your correct username
+
+4. Automatic Deployment:
+   - Every push to the `main` branch will trigger the GitHub Actions workflow
+   - The workflow will:
+     - Run tests (if you have any)
+     - Deploy to PythonAnywhere by pulling the latest changes
+     - Reload your web app
+
+5. Check deployment status:
+   - Go to GitHub repository → Actions tab to see the deployment logs
+   - Visit your PythonAnywhere web app URL to verify the deployment
 
 ## Configuration Options
 
