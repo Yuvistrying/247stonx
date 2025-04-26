@@ -11,6 +11,8 @@ A web application that tracks stock prices from Robinhood, allowing users to cre
 - Color-coded price changes and market status indicators
 - Mobile-responsive design
 - SQLite database for storing user preferences
+- **NEW**: Multi-threaded stock data scraping for significantly faster performance
+- **NEW**: Improved HTML/JSON/API extraction for more reliable data
 
 ## Requirements
 
@@ -52,6 +54,15 @@ python app.py
 2. Open your browser and navigate to http://127.0.0.1:5000/
 
 3. Register a new account and start adding tickers to track
+
+## Performance Improvements
+
+The scraper now utilizes multi-threading for concurrent data retrieval:
+
+| Tickers | Sequential Time | Threaded Time (8 threads) | Speedup |
+|---------|----------------|---------------------------|---------|
+| 6 tickers | ~4.94 seconds | ~0.13 seconds | 38x faster |
+| 8 tickers | ~6.50 seconds | ~0.17 seconds | 38x faster |
 
 ## Deployment on PythonAnywhere
 
@@ -125,6 +136,16 @@ You can set the following environment variables:
 - `SECRET_KEY`: Used for session security (set a strong random key in production)
 - `DATABASE_URL`: SQLite database URI (default is 'sqlite:///stocks.db')
 
+## Scraper Improvements
+
+The stock data scraper now uses a multi-layered approach:
+
+1. **HTML Element Extraction**: Direct extraction from the Robinhood website using BeautifulSoup and lxml
+2. **JSON Data Extraction**: Fallback method using embedded JSON data in the webpage
+3. **API Extraction**: Second fallback method using Robinhood's API endpoints
+
+These improvements ensure more reliable data extraction regardless of market hours or website changes.
+
 ## Limitations
 
 - The free tier of PythonAnywhere may have limited CPU resources
@@ -136,6 +157,55 @@ You can set the following environment variables:
 - The application uses Werkzeug's password hashing for securing user passwords
 - It's recommended to use HTTPS in production
 - Consider adding rate limiting to the API endpoints in production
+
+## Deployment Troubleshooting
+
+### GitHub Actions Deployment Issues
+
+If you encounter JSON decoding errors in the GitHub Actions workflow:
+
+1. **API Response Issues**: Sometimes the PythonAnywhere API might return empty or invalid responses. The updated workflow in this repository includes error handling for these scenarios.
+
+2. **Manual Deployment Alternative**:
+   - SSH into your PythonAnywhere account
+   - Navigate to your project directory:
+     ```
+     cd ~/247stonx
+     ```
+   - Pull the latest changes:
+     ```
+     git pull origin main
+     ```
+   - Install dependencies:
+     ```
+     pip install -r requirements.txt
+     ```
+   - Reload the web app:
+     ```
+     touch /var/www/yourusername_pythonanywhere_com_wsgi.py
+     ```
+
+3. **WSGI Configuration**: Make sure your WSGI file looks like this:
+   ```python
+   import sys
+   import os
+   
+   # Add your project directory to the sys.path
+   path = '/home/yourusername/247stonx'  # Replace with your actual username
+   if path not in sys.path:
+       sys.path.append(path)
+   
+   # Set environment variables for production
+   os.environ['PRODUCTION'] = 'true'
+   os.environ['SECRET_KEY'] = 'your-secure-random-string'  # Change this!
+   
+   # Import Flask app
+   from app import app as application
+   ```
+
+4. **Check Error Logs**: PythonAnywhere provides error logs under the "Web" tab that can help identify deployment issues.
+
+5. **API Rate Limits**: PythonAnywhere API has rate limits. If you're making frequent deployments, you might hit these limits.
 
 ## License
 

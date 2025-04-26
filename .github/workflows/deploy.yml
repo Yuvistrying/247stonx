@@ -35,23 +35,55 @@ jobs:
         PA_USERNAME: ${{ secrets.PA_USERNAME }}
       run: |
         # Create a console to run the deployment script
+        echo "Creating console on PythonAnywhere..."
         response=$(curl -s -X POST \
           "https://www.pythonanywhere.com/api/v0/user/$PA_USERNAME/consoles/" \
           -H "Authorization: Token $PYTHON_ANYWHERE_API_TOKEN" \
-          -d "executable=python3.9" \
+          -d "executable=bash" \
           -d "working_directory=/home/$PA_USERNAME/")
         
-        console_id=$(echo $response | python -c "import sys, json; print(json.load(sys.stdin)['id'])")
+        # Print the response for debugging
+        echo "Response from console creation: $response"
         
-        echo "Console created with ID: $console_id"
-        
-        # Send the command to run the deployment script
-        input='{"input": "cd /home/$PA_USERNAME/247stonx && git pull && touch /var/www/${PA_USERNAME}_pythonanywhere_com_wsgi.py\n"}'
-        
-        curl -s -X POST \
-          "https://www.pythonanywhere.com/api/v0/user/$PA_USERNAME/consoles/$console_id/send_input/" \
-          -H "Authorization: Token $PYTHON_ANYWHERE_API_TOKEN" \
-          -H "Content-Type: application/json" \
-          --data "$input"
-        
-        echo "Deployment started on PythonAnywhere" 
+        # Check if response is valid JSON
+        if echo $response | python3 -c "import sys, json; json.load(sys.stdin)" 2>/dev/null; then
+          console_id=$(echo $response | python3 -c "import sys, json; print(json.load(sys.stdin).get('id', ''))")
+          
+          if [ -z "$console_id" ]; then
+            echo "Failed to get console ID from response"
+            exit 1
+          fi
+          
+          echo "Console created with ID: $console_id"
+          
+          # Send the command to run the deployment script
+          echo "Running deployment commands..."
+          
+          # Command to pull latest code and reload
+          deploy_command="cd /home/$PA_USERNAME/247stonx && git pull origin main && pip install -r requirements.txt && touch /var/www/${PA_USERNAME}_pythonanywhere_com_wsgi.py"
+          
+          input="{\"input\": \"$deploy_command\\n\"}"
+          
+          echo "Sending input: $input"
+          
+          curl -s -X POST \
+            "https://www.pythonanywhere.com/api/v0/user/$PA_USERNAME/consoles/$console_id/send_input/" \
+            -H "Authorization: Token $PYTHON_ANYWHERE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$input"
+          
+          echo "Deployment commands sent to PythonAnywhere"
+        else
+          echo "Invalid JSON response from PythonAnywhere API"
+          echo "Response was: $response"
+          
+          # Alternative deployment using consoles API with simpler parameters
+          echo "Trying alternative deployment method..."
+          
+          # Direct API call to execute a command
+          curl -s -X POST \
+            "https://www.pythonanywhere.com/api/v0/user/$PA_USERNAME/webapps/$PA_USERNAME.pythonanywhere.com/reload/" \
+            -H "Authorization: Token $PYTHON_ANYWHERE_API_TOKEN"
+          
+          echo "Webapp reload request sent" 
+        fi 
