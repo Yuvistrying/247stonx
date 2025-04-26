@@ -142,8 +142,14 @@
 }
 
 /* Make change text stand out a bit more */
-.change {
+.change-today, .change-after-hours {
     font-size: 1.1rem;
+}
+
+/* Style for the "Today" and "After-hours" labels */
+.change-label {
+    color: #6c757d;  /* Using Bootstrap's text-muted color */
+    font-weight: normal;
 }
 
 /* Responsive adjustments */
@@ -151,7 +157,71 @@
     .price {
         font-size: 1.5rem;
     }
-    .change {
+    .change-today, .change-after-hours {
         font-size: 1rem;
     }
+}
+
+/* Toast notifications */
+.toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+}
+
+.toast {
+    width: 350px;
+    max-width: 100%;
+    background-color: #fff;
+    color: #212529;
+    border-radius: 0.25rem;
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
+    margin-bottom: 10px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.toast.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.toast-header {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background-color: rgba(255, 255, 255, 0.85);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    border-top-left-radius: calc(0.25rem - 1px);
+    border-top-right-radius: calc(0.25rem - 1px);
+}
+
+.toast-header .close {
+    margin-left: auto;
+    font-size: 1.25rem;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+}
+
+.toast-body {
+    padding: 0.75rem;
+}
+
+.toast-info {
+    border-left: 4px solid #17a2b8;
+}
+
+.toast-success {
+    border-left: 4px solid #28a745;
+}
+
+.toast-warning {
+    border-left: 4px solid #ffc107;
+}
+
+.toast-error {
+    border-left: 4px solid #dc3545;
 } 
