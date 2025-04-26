@@ -1,65 +1,66 @@
 // Dashboard functionality for 247Stonx
 
 // Configuration
-const MAX_RETRIES = 3; // Increased retries
-const RETRY_DELAY = 2000; // 2 seconds between retries
-const SESSION_KEEPALIVE_INTERVAL = 15000; // 15 seconds for session keepalive
-const AUTO_REFRESH_INTERVAL = 10000; // 10 seconds (changed from 5 seconds)
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000;
+const SESSION_KEEPALIVE_INTERVAL = 120000; // 2 minutes between session keepalive pings
+const AUTO_REFRESH_INTERVAL = 30000; // Reduced from 60 to 30 seconds
+const USE_BULK_ENDPOINT = true; // Always use bulk endpoint for efficiency
+
+// Tracking variables
+let isRefreshing = false;
+let lastSuccessfulRefresh = 0;
+let failedRefreshCount = 0;
 
 // Toast notification function
 function showToast(message, type = 'info') {
-    // Create toast container if it doesn't exist
-    let toastContainer = document.getElementById('toast-container');
-    if (!toastContainer) {
-        toastContainer = document.createElement('div');
-        toastContainer.id = 'toast-container';
-        toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
-        toastContainer.style.zIndex = '1050';
-        document.body.appendChild(toastContainer);
-    }
-    
-    // Create a unique ID for the toast
-    const toastId = 'toast-' + Date.now();
-    
-    // Set toast color based on type
-    let bgColor = 'bg-info';
-    if (type === 'success') bgColor = 'bg-success';
-    if (type === 'error') bgColor = 'bg-danger';
-    if (type === 'warning') bgColor = 'bg-warning';
-    
-    // Create toast element
     const toast = document.createElement('div');
-    toast.className = `toast ${bgColor} text-white`;
-    toast.id = toastId;
-    toast.setAttribute('role', 'alert');
-    toast.setAttribute('aria-live', 'assertive');
-    toast.setAttribute('aria-atomic', 'true');
+    toast.className = `toast toast-${type}`;
     toast.innerHTML = `
         <div class="toast-header">
-            <strong class="me-auto">247Stonx</strong>
-            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
+            <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
         </div>
         <div class="toast-body">
             ${message}
         </div>
     `;
     
-    // Add toast to container
+    // Find or create toast container
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        document.body.appendChild(toastContainer);
+    }
+    
+    // Add to container
     toastContainer.appendChild(toast);
     
-    // Initialize Bootstrap toast
-    const bsToast = new bootstrap.Toast(toast, {
-        autohide: true,
-        delay: 5000
-    });
+    // Show toast using vanilla JavaScript
+    toast.classList.add('show');
     
-    // Show toast
-    bsToast.show();
+    // Add event listener for close button
+    const closeBtn = toast.querySelector('[data-dismiss="toast"]');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function() {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        });
+    }
     
-    // Remove toast after it's hidden
-    toast.addEventListener('hidden.bs.toast', function() {
-        toast.remove();
-    });
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 5000);
 }
 
 // Function to update a single ticker card with data
@@ -67,26 +68,88 @@ function updateTickerCard(ticker, data) {
     const cardContainer = document.querySelector(`.ticker-card-container[data-ticker="${ticker}"]`);
     if (!cardContainer) return;
     
-    const dataEl = cardContainer.querySelector('.ticker-data');
     const priceEl = cardContainer.querySelector('.price');
-    const changeEl = cardContainer.querySelector('.change');
+    const changeTodayEl = cardContainer.querySelector('.change-today');
+    const changeAfterHoursEl = cardContainer.querySelector('.change-after-hours');
     const marketStatusEl = cardContainer.querySelector('.market-status');
     
-    // Ensure data is visible
-    dataEl.style.display = 'block';
+    if (data.error) {
+        // Show error
+        priceEl.textContent = 'Error';
+        changeTodayEl.textContent = data.error;
+        changeTodayEl.className = 'change-today mb-1 text-danger';
+        changeAfterHoursEl.style.display = 'none';
+        return;
+    }
     
-    // Update price
+    // Set price (check if cached)
     priceEl.textContent = data.price;
-    
-    // Update change with color coding
-    changeEl.textContent = data.change;
-    changeEl.className = 'change mb-0';
-    if (data.change.includes('+')) {
-        changeEl.classList.add('price-up');
-    } else if (data.change.includes('-')) {
-        changeEl.classList.add('price-down');
+    if (data.price.includes('cached')) {
+        priceEl.classList.add('text-muted');
     } else {
-        changeEl.classList.add('price-neutral');
+        priceEl.classList.remove('text-muted');
+    }
+    
+    // Check if we have both regular and after-hours changes
+    if (data.change && data.change.includes('|')) {
+        // Split the change data
+        const [todayChange, afterHoursChange] = data.change.split('|').map(s => s.trim());
+        
+        // Extract the numeric part of the today change for coloring
+        const todaySign = todayChange.startsWith('+');
+        
+        // Update the today's change with proper coloring
+        changeTodayEl.innerHTML = '';
+        
+        // Add the colored part (amount and percentage)
+        const colorSpan = document.createElement('span');
+        colorSpan.className = todaySign ? 'price-up' : 'price-down';
+        colorSpan.textContent = todayChange.replace('Today', '').trim();
+        changeTodayEl.appendChild(colorSpan);
+        
+        // Add "Today" as plain text
+        const todaySpan = document.createElement('span');
+        todaySpan.className = 'change-label';
+        todaySpan.textContent = ' Today';
+        changeTodayEl.appendChild(todaySpan);
+        
+        // Show the after-hours element
+        changeAfterHoursEl.style.display = 'block';
+        
+        // Extract the numeric part of the after hours change for coloring
+        const afterHoursMatch = afterHoursChange.match(/([+-][^(]+)/);
+        const afterHoursSign = afterHoursMatch ? afterHoursMatch[1].trim().startsWith('+') : false;
+        
+        // Update the after-hours change with proper coloring
+        changeAfterHoursEl.innerHTML = '';
+        
+        // Add the colored part (amount and percentage)
+        const afterHoursColorSpan = document.createElement('span');
+        afterHoursColorSpan.className = afterHoursSign ? 'price-up' : 'price-down';
+        afterHoursColorSpan.textContent = afterHoursChange.replace('After-hours', '').trim();
+        changeAfterHoursEl.appendChild(afterHoursColorSpan);
+        
+        // Add "After-hours" as plain text
+        const afterHoursSpan = document.createElement('span');
+        afterHoursSpan.className = 'change-label';
+        afterHoursSpan.textContent = ' After-hours';
+        changeAfterHoursEl.appendChild(afterHoursSpan);
+    } else {
+        // Only regular hours data available
+        // Extract the numeric part of the change for coloring
+        const changeSign = data.change.includes('+');
+        
+        // Update the today's change with proper coloring
+        changeTodayEl.innerHTML = '';
+        
+        // Add the colored part (amount and percentage)
+        const colorSpan = document.createElement('span');
+        colorSpan.className = changeSign ? 'price-up' : 'price-down';
+        colorSpan.textContent = data.change;
+        changeTodayEl.appendChild(colorSpan);
+        
+        // Hide the after-hours element
+        changeAfterHoursEl.style.display = 'none';
     }
     
     // Update market status
@@ -99,6 +162,8 @@ function updateTickerCard(ticker, data) {
         marketStatusEl.classList.add('market-closed');
     } else if (data.market_status === 'After Hours' || data.market_status === 'Pre-market') {
         marketStatusEl.classList.add('market-' + data.market_status.toLowerCase().replace(' ', '-'));
+    } else if (data.market_status.includes('stale')) {
+        marketStatusEl.classList.add('text-warning');
     }
 }
 
@@ -150,9 +215,14 @@ function handleError(ticker, error, retryCount = 0) {
     const priceEl = cardContainer.querySelector('.price');
     priceEl.textContent = 'Error';
     
-    const changeEl = cardContainer.querySelector('.change');
-    changeEl.textContent = 'Could not load data';
-    changeEl.className = 'change mb-0 text-danger';
+    // Update both change elements to show error
+    const changeTodayEl = cardContainer.querySelector('.change-today');
+    changeTodayEl.textContent = 'Could not load data';
+    changeTodayEl.className = 'change-today mb-1 text-danger';
+    
+    // Hide after-hours display during error
+    const changeAfterHoursEl = cardContainer.querySelector('.change-after-hours');
+    changeAfterHoursEl.style.display = 'none';
     
     // Show toast for persistent errors
     if (retryCount >= MAX_RETRIES) {
@@ -184,13 +254,16 @@ function fetchTickerData(ticker, retryCount = 0) {
     
     // Create a controller for aborting the request if it takes too long
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 second timeout (increased from 10)
     
     fetch(`/api/stock_data?ticker=${ticker}&_=${Date.now()}`, { // Add cache-busting parameter
         signal: controller.signal,
         credentials: 'same-origin',
         headers: {
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
         }
     })
     .then(response => {
@@ -248,107 +321,197 @@ setInterval(keepSessionAlive, SESSION_KEEPALIVE_INTERVAL);
 // Start a session keepalive immediately
 keepSessionAlive();
 
-// Function to refresh all tickers
+/**
+ * Refreshes all ticker cards on the dashboard
+ */
 function refreshAllTickers() {
-    const tickerCards = document.querySelectorAll('.ticker-card-container');
+    // Verify elements still exist (page might have changed)
+    if (document.querySelectorAll('.ticker-card-container').length === 0) {
+        return;
+    }
     
-    // If no tickers, don't do anything
-    if (tickerCards.length === 0) return;
-    
-    // First keep session alive to ensure we're logged in
+    // Keep the session alive
     keepSessionAlive();
     
-    // Refresh each ticker with a slight delay to avoid rate limiting
-    tickerCards.forEach((card, index) => {
-        const ticker = card.getAttribute('data-ticker');
-        if (ticker) {
-            // Use a staggered approach with smaller delays since we're refreshing more frequently
-            setTimeout(() => {
-                fetchTickerData(ticker);
-            }, index * 200); // 200ms delay between requests (reduced from 300ms)
-        }
-    });
+    // Get all currently displayed tickers
+    const tickerCards = document.querySelectorAll('.ticker-card-container');
+    const tickers = Array.from(tickerCards).map(card => card.dataset.ticker).join(',');
+    
+    if (!tickers) {
+        return; // No tickers to refresh
+    }
+    
+    // Check if this is the initial load (first time refreshing)
+    const isInitialLoad = !window.tickersRefreshed;
+    
+    // Fetch data for all tickers at once (more efficient)
+    fetch(`/api/bulk_stock_data?tickers=${tickers}&initial_load=${isInitialLoad ? 'true' : 'false'}&_=${Date.now()}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Mark that we've refreshed tickers at least once
+            window.tickersRefreshed = true;
+            
+            // Update each ticker card with the new data
+            Object.keys(data).forEach(ticker => {
+                if (ticker !== 'metadata') {
+                    updateTickerCard(ticker, data[ticker]);
+                }
+            });
+            
+            // Optional: Log performance metrics if present
+            if (data.metadata) {
+                console.log(`Refreshed ${data.metadata.tickers_count} tickers in ${data.metadata.total_time.toFixed(2)}s`);
+            }
+        })
+        .catch(error => {
+            console.error('Error refreshing tickers:', error);
+        });
 }
 
-// Set up automatic refresh every 10 seconds
+// Set up automatic refresh every 30 seconds
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Setting up automatic refresh every 10 seconds');
+    console.log('Setting up automatic refresh every 30 seconds');
     
     // Initial refresh of all tickers
     refreshAllTickers();
     
-    // Set up automatic refresh
-    setInterval(refreshAllTickers, AUTO_REFRESH_INTERVAL);
+    // Set up automatic refresh with dynamic interval based on market hours
+    function scheduleNextRefresh() {
+        const now = new Date();
+        const hours = now.getHours();
+        const day = now.getDay();
+        
+        // Check if it's a weekday (1-5, Mon-Fri) and market hours (9:30 AM - 4:00 PM ET)
+        // Simplified check that doesn't account for timezone, holidays, etc.
+        const isWeekday = day >= 1 && day <= 5;
+        const isMarketHours = hours >= 9 && hours < 16;
+        const isExtendedHours = (hours >= 7 && hours < 9) || (hours >= 16 && hours < 20);
+        
+        let refreshInterval;
+        
+        if (isWeekday && isMarketHours) {
+            // During market hours - refresh every 30 seconds
+            refreshInterval = 30000;  // Reduced from 40 to 30 seconds
+        } else if (isWeekday && isExtendedHours) {
+            // During extended hours - refresh every minute
+            refreshInterval = 60000;  // Reduced from 120 to 60 seconds
+        } else {
+            // Outside trading hours - refresh less frequently (every 3 minutes)
+            refreshInterval = 180000;  // Reduced from 5 minutes to 3 minutes
+        }
+        
+        console.log(`Next refresh in ${refreshInterval/1000} seconds`);
+        setTimeout(() => {
+            refreshAllTickers();
+            scheduleNextRefresh();
+        }, refreshInterval);
+    }
     
-    // Add ticker functionality
+    // Start the dynamic refresh scheduling
+    scheduleNextRefresh();
+    
+    // Set up add ticker form
     const addTickerForm = document.getElementById('addTickerForm');
     if (addTickerForm) {
         addTickerForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const tickerInput = document.getElementById('tickerSymbol');
-            const ticker = tickerInput.value.trim().toUpperCase();
+            const tickerInput = this.querySelector('input[name="ticker"]');
+            const submitBtn = this.querySelector('button[type="submit"]');
             
+            // Validate input
+            const ticker = tickerInput.value.trim().toUpperCase();
             if (!ticker) {
-                showToast('Please enter a ticker symbol', 'warning');
+                showToast('Please enter a ticker symbol', 'error');
                 return;
             }
             
-            // Submit form via AJAX
+            // Check if ticker already exists
+            const existingCard = document.querySelector(`.ticker-card-container[data-ticker="${ticker}"]`);
+            if (existingCard) {
+                showToast(`${ticker} is already on your dashboard`, 'warning');
+                tickerInput.value = '';
+                return;
+            }
+            
+            // Disable form and show spinner
+            tickerInput.disabled = true;
+            submitBtn.disabled = true;
+            
+            // Submit via AJAX
             fetch('/add_ticker', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'X-Requested-With': 'XMLHttpRequest'
                 },
-                body: `ticker=${ticker}`
+                body: `ticker=${encodeURIComponent(ticker)}`
             })
             .then(response => {
                 if (!response.ok) {
-                    return response.json().then(data => {
-                        throw new Error(data.error || 'Network response was not ok');
-                    });
+                    // Check Content-Type to see if it's JSON
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        return response.json().then(data => {
+                            throw new Error(data.error || `Failed to add ticker (${response.status})`);
+                        });
+                    } else {
+                        // Not JSON, handle as text
+                        return response.text().then(text => {
+                            throw new Error(text || `Failed to add ticker (${response.status})`);
+                        });
+                    }
                 }
-                return response.json();
+                
+                // Check Content-Type to see if it's JSON
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    return response.json();
+                } else {
+                    // Create a simple success object if not JSON
+                    return { success: true };
+                }
             })
             .then(data => {
                 if (data.success) {
-                    // Show success message before reloading
                     showToast(`Added ${ticker} to your dashboard`, 'success');
+                    
                     // Reload the page to show the new ticker
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1000); // Delay reload to show toast
+                    window.location.reload();
                 } else {
                     showToast(data.error || 'Failed to add ticker', 'error');
                 }
             })
             .catch(error => {
-                console.error('Error adding ticker:', error);
-                if (error.message.includes('already added')) {
-                    showToast(`You already have ${ticker} in your dashboard`, 'warning');
-                } else if (error.message.includes('Could not find ticker')) {
-                    showToast(`Could not find ticker ${ticker}. Please check the symbol and try again.`, 'error');
-                } else {
-                    showToast('Failed to add ticker. Please try again.', 'error');
-                }
+                console.error("Error adding ticker:", error);
+                showToast(error.message || 'Error adding ticker', 'error');
+            })
+            .finally(() => {
+                // Re-enable form
+                tickerInput.disabled = false;
+                submitBtn.disabled = false;
+                tickerInput.value = '';
+                tickerInput.focus();
             });
-            
-            // Clear the input
-            tickerInput.value = '';
         });
     }
     
-    // Remove ticker functionality
-    document.querySelectorAll('.delete-btn').forEach(button => {
-        button.addEventListener('click', function(e) {
-            e.preventDefault();
+    // Set up delete ticker buttons
+    document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const card = this.closest('.ticker-card-container');
+            const ticker = card.getAttribute('data-ticker');
             
-            const tickerId = this.getAttribute('data-ticker');
-            if (!tickerId) return;
-            
-            if (confirm(`Are you sure you want to remove ${tickerId} from your watchlist?`)) {
-                fetch(`/remove_ticker/${tickerId}`, {
+            if (confirm(`Are you sure you want to remove ${ticker} from your dashboard?`)) {
+                // Show loading state
+                this.disabled = true;
+                
+                fetch(`/remove_ticker/${ticker}`, {
                     method: 'POST',
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest'
@@ -356,29 +519,103 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .then(response => {
                     if (!response.ok) {
-                        return response.json().then(data => {
-                            throw new Error(data.error || 'Network response was not ok');
-                        });
+                        // Check Content-Type to see if it's JSON
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && contentType.includes('application/json')) {
+                            return response.json().then(data => {
+                                throw new Error(data.error || `Failed to remove ticker (${response.status})`);
+                            });
+                        } else {
+                            // Not JSON, handle as text
+                            return response.text().then(text => {
+                                throw new Error(text || `Failed to remove ticker (${response.status})`);
+                            });
+                        }
                     }
-                    return response.json();
+                    
+                    // Check Content-Type to see if it's JSON
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        return response.json();
+                    } else {
+                        // Create a simple success object if not JSON
+                        return { success: true };
+                    }
                 })
                 .then(data => {
                     if (data.success) {
-                        // Remove the card from the DOM
-                        const card = document.querySelector(`.ticker-card-container[data-ticker="${tickerId}"]`);
-                        if (card) {
+                        // Animate card removal
+                        card.style.transition = 'opacity 0.3s, transform 0.3s';
+                        card.style.opacity = '0';
+                        card.style.transform = 'scale(0.8)';
+                        
+                        setTimeout(() => {
                             card.remove();
-                            showToast(`Removed ${tickerId} from your dashboard`, 'success');
-                        }
+                            showToast(`Removed ${ticker} from your dashboard`, 'success');
+                        }, 300);
                     } else {
                         showToast(data.error || 'Failed to remove ticker', 'error');
+                        this.disabled = false;
                     }
                 })
                 .catch(error => {
-                    console.error('Error removing ticker:', error);
-                    showToast('Failed to remove ticker. Please try again.', 'error');
+                    console.error("Error removing ticker:", error);
+                    showToast(error.message || 'Error removing ticker', 'error');
+                    this.disabled = false;
                 });
             }
         });
     });
+    
+    // Set up clear cache button if present
+    const clearCacheBtn = document.getElementById('clearCacheBtn');
+    if (clearCacheBtn) {
+        clearCacheBtn.addEventListener('click', function() {
+            if (confirm('Are you sure you want to clear the cache? This will force refreshing all data from source.')) {
+                fetch('/api/clear_cache', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        // Handle non-OK response
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && contentType.includes('application/json')) {
+                            return response.json().then(data => {
+                                throw new Error(data.message || `Failed to clear cache (${response.status})`);
+                            });
+                        } else {
+                            return response.text().then(text => {
+                                throw new Error(text || `Failed to clear cache (${response.status})`);
+                            });
+                        }
+                    }
+                    
+                    // Check Content-Type to see if it's JSON
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        return response.json();
+                    } else {
+                        // Create a simple success object if not JSON
+                        return { status: 'success' };
+                    }
+                })
+                .then(data => {
+                    if (data.status === 'success') {
+                        showToast('Cache cleared successfully', 'success');
+                        // Trigger a refresh of all tickers
+                        refreshAllTickers();
+                    } else {
+                        showToast(data.message || 'Failed to clear cache', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error("Error clearing cache:", error);
+                    showToast(error.message || 'Error clearing cache', 'error');
+                });
+            }
+        });
+    }
 }); 
